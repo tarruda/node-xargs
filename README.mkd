@@ -15,8 +15,8 @@ npm install --save xargs
 ## Usage
 
 The function exported by this module returns a duplex stream that collects all
-string chunks written to it into a list and executes a command by appending the
-list as to argument vector:
+string chunks written to it into an array, which is used as the argument vector
+for the specified command:
 
 ```js
 var streamify = require('stream-array');
@@ -56,6 +56,57 @@ process.stdin
   .pipe(process.stdout);
 ```
 
+Like the unix command, `xargs` will redirect the spawned process stdin to
+/dev/null, but if the `input` option is passed and set to a stream, `xargs` will
+use it as the source of arguments, and whatever is written to the stream will be
+piped into the process:
+
+
+```js
+var fs = require('fs');
+var str = require('string-to-stream');
+
+str([1, 2, 3, 4, 5].join('\n'))
+  .pipe(fs.createWriteStream('args.txt'))
+  .on('unpipe', function() {
+    xargs('echo', {input: fs.createReadStream('args.txt')})
+      .pipe(process.stdout);  // will print "1 2 3 4 5"
+  });
+```
+
+In this case, the xargs input should be a raw stream.
+
+As a bonus, `xargs` may be used as a nicer API for `child_process.spawn`. If the
+`input` option is passed and set to null, xargs won't redirect stdin to
+/dev/null and won't try to read arguments from anywhere else. Instead, it will
+just forward any data piped to it into the spawned process:
+
+```js
+// print all words(unique) found in a list of files passed as argument
+
+xargs(['cat'].concat(process.argv.slice(2)), {input: null})
+  .pipe(xargs('tr -s "[[:punct:][:space:]]" "\n"', {input: null}))
+  .pipe(xargs('tr "[:upper:]" "[:lower:]"', {input: null}))
+  .pipe(xargs('sort', {input: null}))
+  .pipe(xargs('uniq', {input: null}))
+  .pipe(process.stdout)
+```
+
+The `xargs.spawn` function is provided as a wrapper that passes `{input: null}`,
+so the above may be rewritten as:
+
+```js
+var s = xargs.spawn
+
+s(['cat'].concat(process.argv.slice(2)))
+  .pipe(s('tr -s "[[:punct:][:space:]]" "\n"'))
+  .pipe(s('tr "[:upper:]" "[:lower:]"'))
+  .pipe(s('sort'))
+  .pipe(s('uniq'))
+  .pipe(process.stdout)
+```
+
+
 ## API
 
 #### xargs([argv, opts])
@@ -69,12 +120,27 @@ it will be parsed with
 written to the XargsStream are appended to the end of `argv` before the command
 is spawned.
 
-`opts` accepts the same options as `require('child_process').spawn`, but it uses
-a default of `['ignore', 'pipe', process.stderr]` for the `stdio` option. This
-is done to emulate the `xargs` command behavior, which by default redirects
-stdin to /dev/null and inherits stderr. The properties `stdin`, `stdout` and
-`stderr` are set on the XargsStream once the process is spawned. 
+`opts` accepts the same options as `require('child_process').spawn` with a extra
+`input` option, which can be used to specify an alternate stream to read
+arguments from. If `input` is null, `xargs` wont try to read arguments from any
+stream.
 
-Both arguments are optional, but if `argv` is ommited the chunks will simply be
-echoed to the sink stream(Same output as if the `echo` was passed to `argv`).
+If no `input` option is passed, or if no stream is piped into `xargs` soon, the
+default value for `stdio` is `['ignore', 'pipe', process.stderr]`. In all other
+cases it is `['pipe', 'pipe', process.stderr]`(stderr is always inherited by
+default).  The `stdio` value can be overriden and the properties `stdin`,
+`stdout` and `stderr` are set on the XargsStream after the process is spawned.
 
+Both arguments are optional, but if `argv` is ommited "/bin/echo" program will be
+executed.
+
+#### XargsStream.kill([signal])
+
+Wrapper around `ChildProcess.kill()` that will queue signals if the process
+wasn't started when this method is called.
+
+
+#### xargs.spawn([argv, options])
+
+Wrapper around `xargs(argv, options)` that will force the `{input: null}`
+option.
