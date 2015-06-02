@@ -15,6 +15,23 @@
     "url": "https://github.com/tarruda/node-xargs/issues"
   },
   "license": "MIT",
+  "keywords": [
+    "xargs",
+    "unix",
+    "stream",
+    "streaming-spawn",
+    "command",
+    "args",
+    "command-args",
+    "arguments",
+    "command-arguments",
+    "spawn",
+    "shell",
+    "exec",
+    "run",
+    "gulp",
+    "gulp-shell"
+  ],
   "main": "./index",
   "dependencies": {
     "has": "^1.0.0",
