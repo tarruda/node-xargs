@@ -12,6 +12,16 @@ function appendArgv(argv, item) {
   if (item && (item = item.toString())) argv.push(item);
 }
 
+
+function connectSource(buffer, source, to) {
+  // take all buffered chunks and the source stream and pipe into the spawned
+  // process stdin
+  var chunkStream = streamify(buffer);
+  chunkStream.once('end', source.pipe.bind(source, to))
+  chunkStream.pipe(to, {end: false});
+}
+
+
 function XargsStream(argv, opts) {
   Duplex.call(this);
 
@@ -28,6 +38,7 @@ function XargsStream(argv, opts) {
     opts: opts,
     proc: null,
     externalInput: 0,
+    ended: false,
     source: null,
     target: null,
     buffer: [],
@@ -72,9 +83,18 @@ XargsStream.prototype.kill = function(signal) {
 };
 
 
+XargsStream.prototype.end = function() {
+  this._xargs.ended = true;
+  if (this.stdin) this.stdin.end();
+  Duplex.prototype.end.apply(this, arguments);
+  return this;
+};
+
+
 XargsStream.prototype.pipe = function(target) {
   this._xargs.target = target;
   if (this.stdout) this.stdout.pipe(this._xargs.target);
+  else if (this._xargs.proc) target.end();
   return target;
 };
 
@@ -86,6 +106,8 @@ XargsStream.prototype.unpipe = function(target) {
 
 XargsStream.prototype._on_pipe = function(source) {
   this._xargs.source = source;
+  if (this.stdin)
+    connectSource(this._xargs.buffer, source, this.stdin);
 };
 
 
@@ -95,13 +117,12 @@ XargsStream.prototype._spawn = function() {
 
   var xargs = this._xargs;
   var opts = xtend({}, xargs.opts);
-  var source = xargs.source;
   var externalInput = xargs.externalInput;
 
   if (!opts.stdio) {
     // If externalInput is 0, redirect the child stdin to /dev/null.
     opts.stdio = ['ignore', 'pipe', process.stderr];
-    if (source && externalInput !== 0) opts.stdio[0] = 'pipe';
+    if (externalInput !== 0) opts.stdio[0] = 'pipe';
   }
 
   var args = xargs.argv;
@@ -116,22 +137,16 @@ XargsStream.prototype._spawn = function() {
   this.stdout = proc.stdout;
   this.stderr = proc.stderr;
 
+  var source = xargs.source;
+  var buffer = xargs.buffer;
   if (this.stdin) {
-    var buffer = xargs.buffer;
-    // take all buffered chunks and the source stream and pipe into the spawned
-    // process stdin
-    var chunkStream = streamify(buffer);
-    chunkStream.once('end', source.pipe.bind(source, this.stdin))
-    chunkStream.pipe(this.stdin, {end: false});
+    if (source) connectSource(buffer, source, this.stdin);
+    else if (xargs.ended) this.stdin.end();
   }
 
   if (xargs.target) {
-    if (this.stdout) {
-      this.stdout.pipe(xargs.target);
-      this.stdout.once('close', this.emit.bind(this, 'close'));
-    } else {
-      xargs.target.end();
-    }
+    if (this.stdout) this.stdout.pipe(xargs.target);
+    else xargs.target.end();
   }
 }
 

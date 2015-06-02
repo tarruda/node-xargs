@@ -44,7 +44,7 @@ it expects an object stream as input(each item will have it's toString method
 called). If a raw stream is required, simply pipe it through a module like
 [split](https://github.com/dominictarr/split).
 
-For example, here's how a simplified version of the xargs command:
+For example, here's a simplified version of the xargs command:
 
 ```js
 var xargs = require('xargs');
@@ -57,7 +57,7 @@ process.stdin
 ```
 
 Like the unix command, `xargs` will redirect the spawned process stdin to
-/dev/null, but if the `input` option is passed and set to a stream, `xargs` will
+`/dev/null`, but if the `input` option is passed and set to a stream, `xargs` will
 use it as the source of arguments, and whatever is written to the stream will be
 piped into the process:
 
@@ -76,15 +76,16 @@ str([1, 2, 3, 4, 5].join('\n'))
 
 In this case, the xargs input should be a raw stream.
 
-As a bonus, `xargs` may be used as a nicer API for `child_process.spawn`. If the
-`input` option is passed and set to null, xargs won't redirect stdin to
-/dev/null and won't try to read arguments from anywhere else. Instead, it will
-just forward any data piped to it into the spawned process:
+As a bonus, `xargs` may be used as a nicer/streaming API for
+`child_process.spawn`. If the `input` option is passed and set to null, xargs
+won't redirect stdin to `/dev/null` and won't try to read arguments from anywhere
+else. Instead, it will just forward any data piped to it into the spawned
+process:
 
 ```js
 // print all words(unique) found in a list of files passed as argument
 
-xargs(['cat'].concat(process.argv.slice(2)), {input: null})
+xargs(['cat'].concat(process.argv.slice(2)), {input: null}).end()
   .pipe(xargs('tr -s "[[:punct:][:space:]]" "\n"', {input: null}))
   .pipe(xargs('tr "[:upper:]" "[:lower:]"', {input: null}))
   .pipe(xargs('sort', {input: null}))
@@ -92,18 +93,21 @@ xargs(['cat'].concat(process.argv.slice(2)), {input: null})
   .pipe(process.stdout)
 ```
 
-The `xargs.spawn` function is provided as a wrapper that passes `{input: null}`,
-so the above may be rewritten as:
+Note that the `end()` method returns the stream, so it can be chained with more
+`pipe()` calls.
+
+The `xargs.spawn` a wrapper that passes `{input: null}`, so the above may be
+rewritten as:
 
 ```js
 var s = xargs.spawn
 
-s(['cat'].concat(process.argv.slice(2)))
+s(['cat'].concat(process.argv.slice(2))).end()
   .pipe(s('tr -s "[[:punct:][:space:]]" "\n"'))
   .pipe(s('tr "[:upper:]" "[:lower:]"'))
   .pipe(s('sort'))
-  .pipe(s('uniq'))
-  .pipe(process.stdout)
+   // inheriting stdout is more efficient than piping to it
+  .pipe(s('uniq', {stdio: ['pipe', process.stdout, process.stderr]}))
 ```
 
 
@@ -125,14 +129,18 @@ is spawned.
 arguments from. If `input` is null, `xargs` wont try to read arguments from any
 stream.
 
-If no `input` option is passed, or if no stream is piped into `xargs` soon, the
-default value for `stdio` is `['ignore', 'pipe', process.stderr]`. In all other
-cases it is `['pipe', 'pipe', process.stderr]`(stderr is always inherited by
-default).  The `stdio` value can be overriden and the properties `stdin`,
-`stdout` and `stderr` are set on the XargsStream after the process is spawned.
+If no `input` option is passed the default value for `stdio` is `['ignore', 'pipe', process.stderr]`. In all other cases it is `['pipe', 'pipe',
+process.stderr]`(stderr is always inherited by default).  The `stdio` value can
+be overriden and the properties `stdin`, `stdout` and `stderr` are set on the
+XargsStream after the process is spawned.
 
 Both arguments are optional, but if `argv` is ommited "/bin/echo" program will be
 executed.
+
+#### xargs.spawn([argv, options])
+
+Wrapper around `xargs(argv, options)` that will force the `{input: null}`
+option.
 
 #### XargsStream.kill([signal])
 
@@ -140,7 +148,3 @@ Wrapper around `ChildProcess.kill()` that will queue signals if the process
 wasn't started when this method is called.
 
 
-#### xargs.spawn([argv, options])
-
-Wrapper around `xargs(argv, options)` that will force the `{input: null}`
-option.
