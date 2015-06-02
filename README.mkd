@@ -1,0 +1,80 @@
+# xargs
+
+#### Build and execute command lines from a input stream. This is the streaming version of the "xargs" unix command.
+
+[![Build Status](https://travis-ci.org/tarruda/node-xargs.png)](https://travis-ci.org/tarruda/node-xargs)
+<br>
+
+
+## Installation
+
+```sh
+npm install --save xargs
+```
+
+## Usage
+
+The function exported by this module returns a duplex stream that collects all
+string chunks written to it into a list and executes a command by appending the
+list as to argument vector:
+
+```js
+var streamify = require('stream-array');
+var xargs = require('xargs');
+
+streamify(['arg1', 'arg2', 'arg3'])
+  .pipe(xargs(['echo']))
+  .pipe(process.stdout);  // outputs: arg1 arg2 arg3
+```
+
+This can be useful for running shell commands in a gulp pipeline, for example:
+
+```js
+var gulp = require('gulp');
+var map = require('map-stream');
+
+gulp.src('test/*.js')
+  .pipe(map(function(file, cb) { cb(null, file.path); }))
+  .pipe(xargs('mocha'))  // if xargs receives a string, it will use shell-quote to parse it into an argument vector for child_process.spawn.
+  .pipe(process.stdout);
+```
+
+Note that `xargs()` will use each received chunk as an individual argument, so
+it expects an object stream as input(each item will have it's toString method
+called). If a raw stream is required, simply pipe it through a module like
+[split](https://github.com/dominictarr/split).
+
+For example, here's how a simplified version of the xargs command:
+
+```js
+var xargs = require('xargs');
+var split = require('split');
+
+process.stdin
+  .pipe(split())
+  .pipe(xargs([process.argv[2]].concat(process.argv.slice(3))))
+  .pipe(process.stdout);
+```
+
+## API
+
+#### xargs([argv, opts])
+
+Return a XargsStream that will spawn a process using `argv` and `opts`. The
+returned instance can be used as if it was the the spawned process stdout.
+
+`argv` is the argument vector and can be an array or a string. If it's a string,
+it will be parsed with
+[shell-quote](https://github.com/substack/node-shell-quote).  All chunks chunks
+written to the XargsStream are appended to the end of `argv` before the command
+is spawned.
+
+`opts` accepts the same options as `require('child_process').spawn`, but it uses
+a default of `['ignore', 'pipe', process.stderr]` for the `stdio` option. This
+is done to emulate the `xargs` command behavior, which by default redirects
+stdin to /dev/null and inherits stderr. The properties `stdin`, `stdout` and
+`stderr` are set on the XargsStream once the process is spawned. 
+
+Both arguments are optional, but if `argv` is ommited the chunks will simply be
+echoed to the sink stream(Same output as if the `echo` was passed to `argv`).
+
