@@ -1,7 +1,7 @@
 {
   "name": "xargs",
   "description": "Build and execute command lines from a input stream. This is the streaming version of the \"xargs\" unix command.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "homepage": "https://github.com/tarruda/node-xargs",
   "author": {
     "name": "Thiago de Arruda",
