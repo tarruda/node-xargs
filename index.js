@@ -38,6 +38,8 @@ function XargsStream(argv, opts) {
     opts: opts,
     proc: null,
     externalInput: 0,
+    readRequested: false,
+    spawned: false,
     ended: false,
     source: null,
     target: null,
@@ -53,15 +55,12 @@ function XargsStream(argv, opts) {
     if (externalInput) {
       setImmediate(function() {
         // External input, only spawn when all arguments have been collected.
-        // Attach handlers on next tick to prevent the 'end' event handler being
-        // fired before a synchronous input stream could pipe to this stream.
         externalInput.on('data', appendArgv.bind(null, xargs.argv));
         externalInput.once('end', spawn);
       });
     } else {
-      // When external input is specified as a falsy value, we don't try to
-      // collect arguments from any stream and perform a more standard child
-      // process spawn.
+      // When external input is specified as a falsy value, don't need to
+      // collect arguments from a stream.
       setImmediate(spawn);
     }
 
@@ -106,16 +105,22 @@ XargsStream.prototype.unpipe = function(target) {
 
 XargsStream.prototype._on_pipe = function(source) {
   this._xargs.source = source;
-  if (this.stdin)
-    connectSource(this._xargs.buffer, source, this.stdin);
+  if (this.stdin) connectSource(this._xargs.buffer, source, this.stdin);
+  else if (this._xargs.readRequested) this._xargs.source.read();
 };
 
 
 XargsStream.prototype._spawn = function() {
+  var xargs = this._xargs;
+
+  if (xargs.spawned) {
+    return;
+  }
+
+  xargs.spawned = true;
   this._read = function() {};
   this._write = function(c, e, cb) { cb(); };
 
-  var xargs = this._xargs;
   var opts = xtend({}, xargs.opts);
   var externalInput = xargs.externalInput;
 
@@ -163,7 +168,8 @@ XargsStream.prototype._write = function(item, enc, cb) {
 
 
 XargsStream.prototype._read = function(size) {
-  return this._xargs.source.read();
+  this._xargs.readRequested = true;
+  if (this._xargs.source) this._xargs.source.read();
 };
 
 
