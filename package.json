@@ -46,6 +46,7 @@
     "tape-catch": "^1.0.4"
   },
   "scripts": {
-    "test": "make test"
+    "test": "make test",
+    "prepublish": "[ -r ~/.global.gitignore ] && [ -e .npmignore ] || ln -s ~/.global.gitignore .npmignore"
   }
 }
