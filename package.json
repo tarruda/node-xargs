@@ -47,6 +47,6 @@
   },
   "scripts": {
     "test": "make test",
-    "prepublish": "[ -r ~/.global.gitignore ] && [ -e .npmignore ] || ln -s ~/.global.gitignore .npmignore"
+    "prepublish": "[ -r ~/.global.npmignore ] && cat ~/.global.npmignore > .npmignore || true"
   }
 }
